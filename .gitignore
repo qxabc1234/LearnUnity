@@ -1,0 +1,8 @@
+﻿.idea
+.vs
+Library
+Logs
+obj
+Temp
+*.csproj
+LearnUnity.sln
