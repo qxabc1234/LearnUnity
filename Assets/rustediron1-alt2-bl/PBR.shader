@@ -2,7 +2,7 @@
 
 // Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
 
-Shader "Unlit/SphereTexturedShader"
+Shader "Qiu/PBRShader"
 {
     Properties
     {
@@ -34,7 +34,7 @@ Shader "Unlit/SphereTexturedShader"
             float4 vertex : POSITION; // 顶点位置
             float3 normal : NORMAL;
             float2 uv : TEXCOORD0; // 纹理坐标
-            float3 tangent : TANGENT;
+            float4 tangent : TANGENT;
 
         };
 
@@ -58,19 +58,17 @@ Shader "Unlit/SphereTexturedShader"
 
             o.uv = v.uv * _MainTex_ST.xy + _MainTex_ST.zw;
 
-            float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
-            float3 worldNormal = UnityObjectToWorldNormal(v.normal);
-            float3 worldTangent = UnityObjectToWorldDir(v.tangent.xyz);
-            float3 worldBinormal = cross(worldNormal, worldTangent);
-            float3 OTT0 = float3(worldTangent.x, worldBinormal.x, worldNormal.x);
-            float3 OTT1 = float3(worldTangent.y, worldBinormal.y, worldNormal.y);
-            float3 OTT2 = float3(worldTangent.z, worldBinormal.z, worldNormal.z);
-            fixed3 lightDir = ObjSpaceLightDir(o.vertex);
-            fixed3 viewDir = ObjSpaceViewDir(o.vertex);
+            float4 worldPos = mul(unity_ObjectToWorld, v.vertex);
+            float3 worldNormal = normalize(UnityObjectToWorldNormal(v.normal));
+            float3 worldTangent = normalize(UnityObjectToWorldDir(v.tangent.xyz));
+            float3 worldBinormal = normalize(cross(worldNormal, worldTangent)) * v.tangent.w;
+            float3 OTT0 = float3(worldTangent.x, worldTangent.y, worldTangent.z);
+            float3 OTT1 = float3(worldBinormal.x, worldBinormal.y, worldBinormal.z);
+            float3 OTT2 = float3(worldNormal.x, worldNormal.y, worldNormal.z);
+            fixed3 lightDir = WorldSpaceLightDir(v.vertex);
+            fixed3 viewDir = WorldSpaceViewDir(v.vertex);
             o.tangentLightDir = normalize(half3(dot(OTT0.xyz, lightDir), dot(OTT1.xyz, lightDir), dot(OTT2.xyz, lightDir)));
             o.tangentViewDir = normalize(half3(dot(OTT0.xyz, viewDir), dot(OTT1.xyz, viewDir), dot(OTT2.xyz, viewDir)));
-            o.worldNormal = worldNormal;
-            o.worldViewDir = WorldSpaceViewDir(o.vertex);
             return o;
         }
 
@@ -79,7 +77,7 @@ Shader "Unlit/SphereTexturedShader"
         sampler2D _AOTex;
         sampler2D _RoughnessTex;
         sampler2D _metallic;
-        float PI = 3.14159265359;
+        #define  PI 3.14159265359
 
         float GeometrySchlickGGX(float NdotV, float roughness)
         {
@@ -96,28 +94,28 @@ Shader "Unlit/SphereTexturedShader"
         {
 
                 fixed4 col = tex2D(_MainTex, i.uv);
-                fixed4 normal = tex2D(_BumpMap, i.uv);
+                fixed3 normal = UnpackNormal(tex2D(_BumpMap, i.uv));
                 fixed3 tangentNormal = normalize(normal.rgb);
                 float roughness = tex2D(_RoughnessTex, i.uv).r;
                 float ao = tex2D(_AOTex, i.uv).r;
                 float metallic = tex2D(_metallic, i.uv).r;
 
-               // fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * col.rgb;
+              //  fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * col.rgb;
 
 
               //  fixed3 diffuse = _LightColor0.rgb * col.rgb * max(0, dot(tangentNormal, i.tangentLightDir));
 
                 fixed3 halfDir = normalize(i.tangentLightDir + i.tangentViewDir);
 
-               // fixed3 specular = _LightColor0.rgb * specularcol.rgb * pow(max(0, dot(tangentNormal, halfDir)), 32);
+             //   fixed3 specular = _LightColor0.rgb * specularcol.rgb * pow(max(0, dot(tangentNormal, halfDir)), 32);
 
-                fixed3 F0 = fixed3(0.04, 0.04, 0.04);
-                fixed3 albedo = fixed3(pow(col.r, 2.2), pow(col.g, 2.2), pow(col.b, 2.2));
+                float3 F0 = 0.04;
+                float3 albedo = pow(col, 2.2); 
                 F0 = lerp(F0, albedo, metallic);
 
                 //Fresnel
                 float cosTheta = max(dot(halfDir, i.tangentViewDir), 0.0);
-                fixed3 F = F0 + (1 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5);
+                float3 F = F0 + (1 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5);
 
                 //DistributionGGX
                 float a = roughness * roughness;
@@ -140,17 +138,20 @@ Shader "Unlit/SphereTexturedShader"
                 float G = ggx1 * ggx2;
 
                 //Cook-Torrance BRDF
-                fixed3 radiance = _LightColor0.rgb;
-                fixed3 kS = F;
-                fixed3 kD = fixed3(1.0 - kS.x, 1.0 - kS.y, 1.0 - kS.z) * (1.0 - metallic);
-                fixed3 nominator = NDF * G * F;
+                float3 radiance = _LightColor0.rgb;
+                float3 kS = F;
+                float3 kD = float3(1, 1, 1) - kS;
+                kD *= 1.0 - metallic;
+                float3 nominator = NDF * G * F;
                 float denominator = 4.0 * NdotV * NdotL + 0.001;
-                fixed3 specular = nominator / denominator;
+                float3 specular = nominator / denominator;
 
-                fixed3 ambient = albedo * 0.03 * ao;
-                fixed3 Lo = (kD * albedo / PI + specular) * radiance * NdotL;
+                float3 ambient = albedo * 0.03 * ao;
+                float3 diffuse = kD * albedo / PI;
+                float3 Lo = (diffuse + specular) * radiance * NdotL;
 
-                fixed3 color = ambient + Lo;
+                float3 color = ambient + Lo;
+                color = color / (color + 1);
 
                 return fixed4(color, 1.0);
 
