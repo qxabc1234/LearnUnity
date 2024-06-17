@@ -96,7 +96,9 @@ Shader "Qiu/PBRShader"
                 fixed4 col = tex2D(_MainTex, i.uv);
                 fixed3 normal = UnpackNormal(tex2D(_BumpMap, i.uv));
                 fixed3 tangentNormal = normalize(normal.rgb);
-                float roughness = tex2D(_RoughnessTex, i.uv).r;
+                float smoothness = tex2D(_metallic, i.uv).a;
+                float roughness = 1.0 - smoothness;
+  
                 float ao = tex2D(_AOTex, i.uv).r;
                 float metallic = tex2D(_metallic, i.uv).r;
 
@@ -110,7 +112,7 @@ Shader "Qiu/PBRShader"
              //   fixed3 specular = _LightColor0.rgb * specularcol.rgb * pow(max(0, dot(tangentNormal, halfDir)), 32);
 
                 float3 F0 = 0.04;
-                float3 albedo = pow(col, 2.2); 
+                float3 albedo = col;
                 F0 = lerp(F0, albedo, metallic);
 
                 //Fresnel
@@ -146,7 +148,7 @@ Shader "Qiu/PBRShader"
                 float denominator = 4.0 * NdotV * NdotL + 0.001;
                 float3 specular = nominator / denominator;
 
-                float3 ambient = albedo * 0.03 * ao;
+                float3 ambient = albedo * ao * 0.8 ;
                 float3 diffuse = kD * albedo / PI;
                 float3 Lo = (diffuse + specular) * radiance * NdotL;
 
