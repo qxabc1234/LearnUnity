@@ -26,6 +26,10 @@ Shader "Qiu/PBRShader"
         #include "UnityCG.cginc" // 对于 UnityObjectToWorldNormal
         #include "UnityLightingCommon.cginc" // 对于 _LightColor0
 
+
+        #pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
+        #include "AutoLight.cginc"
+
         float4 _MainTex_ST;
 
         // 顶点着色器输入
@@ -42,7 +46,8 @@ Shader "Qiu/PBRShader"
         struct v2f
         {
             float2 uv : TEXCOORD0; // 纹理坐标
-            float4 vertex : SV_POSITION; // 裁剪空间位置
+            SHADOW_COORDS(1)
+            float4 pos : SV_POSITION; // 裁剪空间位置
             fixed3 tangentLightDir : TEXCOORD1;
             fixed3 tangentViewDir : TEXCOORD2;
             float3 worldNormal : TEXCOORD3;
@@ -54,7 +59,7 @@ Shader "Qiu/PBRShader"
         {
             v2f o;
 
-            o.vertex = UnityObjectToClipPos(v.vertex);
+            o.pos = UnityObjectToClipPos(v.vertex);
 
             o.uv = v.uv * _MainTex_ST.xy + _MainTex_ST.zw;
 
@@ -69,6 +74,8 @@ Shader "Qiu/PBRShader"
             fixed3 viewDir = WorldSpaceViewDir(v.vertex);
             o.tangentLightDir = normalize(half3(dot(OTT0.xyz, lightDir), dot(OTT1.xyz, lightDir), dot(OTT2.xyz, lightDir)));
             o.tangentViewDir = normalize(half3(dot(OTT0.xyz, viewDir), dot(OTT1.xyz, viewDir), dot(OTT2.xyz, viewDir)));
+
+            TRANSFER_SHADOW(o)
             return o;
         }
 
@@ -151,8 +158,10 @@ Shader "Qiu/PBRShader"
                 float3 ambient = albedo * ao * 0.8 ;
                 float3 diffuse = kD * albedo / PI;
                 float3 Lo = (diffuse + specular) * radiance * NdotL;
+                // 计算阴影衰减（1.0 = 完全照亮，0.0 = 完全阴影）
+                fixed shadow = SHADOW_ATTENUATION(i);
 
-                float3 color = ambient + Lo;
+                float3 color = ambient + Lo * shadow;
                 color = color / (color + 1);
 
                 return fixed4(color, 1.0);
@@ -160,5 +169,35 @@ Shader "Qiu/PBRShader"
         }
         ENDCG
         }
+
+
+        Pass
+        {
+            Tags {"LightMode" = "ShadowCaster"}
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_shadowcaster
+            #include "UnityCG.cginc"
+
+            struct v2f {
+                V2F_SHADOW_CASTER;
+            };
+
+            v2f vert(appdata_base v)
+            {
+                v2f o;
+                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
+                return o;
+            }
+
+            float4 frag(v2f i) : SV_Target
+            {
+                SHADOW_CASTER_FRAGMENT(i)
+            }
+            ENDCG
+        }
+
     }
 }
