@@ -45,13 +45,13 @@ Shader "Qiu/PBRShader"
         // 顶点着色器输出（"顶点到片元"）
         struct v2f
         {
-            float2 uv : TEXCOORD0; // 纹理坐标
-            SHADOW_COORDS(1)
             float4 pos : SV_POSITION; // 裁剪空间位置
+            float2 uv : TEXCOORD0; // 纹理坐标
             fixed3 tangentLightDir : TEXCOORD1;
             fixed3 tangentViewDir : TEXCOORD2;
             float3 worldNormal : TEXCOORD3;
             fixed3 worldViewDir : TEXCOORD4;
+            SHADOW_COORDS(5)
         };
 
         // 顶点着色器
@@ -158,7 +158,6 @@ Shader "Qiu/PBRShader"
                 float3 ambient = albedo * ao * 0.8 ;
                 float3 diffuse = kD * albedo / PI;
                 float3 Lo = (diffuse + specular) * radiance * NdotL;
-                // 计算阴影衰减（1.0 = 完全照亮，0.0 = 完全阴影）
                 fixed shadow = SHADOW_ATTENUATION(i);
 
                 float3 color = ambient + Lo * shadow;
